@@ -1,11 +1,11 @@
-%%Cyclic Pursuit test1
-
+%%Cyclic Pursuit test2
+% Set resolution and error toggles before simulation!
 clc; clear;
 map_size = [100,100]; % cm
 N = 5; %Number of agents
-dt = 0.05; % Update period: unit s
+dt = 0.02; % Update period: unit s
 t = 0;
-t_max =50;
+t_max =70;
 
 Rot = @(t) [cos(t) -sin(t) ;sin(t) cos(t)] ;
 Relative_mat = eye(N,N); % Get the relative pos from X and Y
@@ -17,31 +17,32 @@ Y = zeros(N,t_max/dt);
 x_measured = zeros(N,1);
 y_measured = zeros(N,1);
 xy_res = 2000;
-xy_error_toggle = 1;
+xy_error_toggle = 0;
 xy_sig = 1e-2*(1+randn(N,1)) % Standard deviation
 xy_miu = 1e-3*randn(N,1)
 
 R = zeros(N,t_max/dt);
 r_measured = zeros(N,1); % Calculated by the measured x and y.
+target_r = 17;
 Alpha = zeros(N,t_max/dt);
 Beta = zeros(N,t_max/dt);
 
 Theta = zeros(N,1);
 theta_measured = zeros(N,1); % Measured Theta's values.
-theta_res = 2;
+theta_res = 2000;
 
 V = zeros(N,1);
 Omega = zeros(N,1);
 k_alpha = 1;
 % k_r = 1;
-k_r = (pi/10)*csc(pi/5);
+k_r = (pi/(2*N))*csc(pi/N);
 
-omega_res = 1; % the resolution of omega.
-omega_error_toggle = 1;% Turn it on if taking the errors of omega of the actuators into account.
+omega_res = 1000; % the resolution of omega.
+omega_error_toggle = 0;% Turn it on if taking the errors of omega of the actuators into account.
 omega_sig = 5*1e-2*(1+randn(N,1))
 omega_miu = 1e-3*randn(N,1)
-v_res = 1;
-v_error_toggle = 1;
+v_res = 1000;
+v_error_toggle = 0;
 v_sig = 5*1e-2*(1+randn(N,1))
 v_miu = 1e-3*randn(N,1)
 
@@ -56,12 +57,12 @@ Theta = 2*pi*rand(N,1); %% 0 to 2*pi
 rand_flag = true;
 saved_data = [X(:,1),Y(:,1),Theta]; % This would be saved if the agents do not converge to the polygon formation
 
-% Pos = Gen_Polygon_formation(0.5*map_size, 0.3*map_size(1), N, 0);
-% X(:,1) = Pos(:,1);
-% Y(:,1) = Pos(:,2);
-% Theta = Pos(:,3);
+% Pos = Gen_Polygon_formation(0.5*map_size, 17, N, 0);
+% X(:,1) = Pos(1:end,1);
+% Y(:,1) = Pos(1:end,2);
+% Theta = Pos(1:end,3);
 
-% load("test2_10hz_converges_to_a_point.mat");
+% load("test2_fixed_speed_mess_up.mat");
 % X(:,1) = saved_data(:,1);
 % Y(:,1) = saved_data(:,2);
 % Theta = saved_data(:,3);
@@ -73,19 +74,26 @@ Q = zeros(N,2);
 Q_ = zeros(N,2);
 Q(:,1) = Relative_mat*X(:,1); % [x1-x2, y1-y2; ....]
 Q(:,2) = Relative_mat*Y(:,1);
-for i=1:N
-    if (i == N)
-        Q_(i,:) = transpose(Rot(Theta(1)))* transpose(Q(i,:));
-    else
-        Q_(i,:) = transpose(Rot(Theta(i+1)))*transpose(Q(i,:));
-    end
-end
-
-Alpha(:, 1) = atan(Q_(:,2)./Q_(:,1)) - Relative_mat*Theta;
+Alpha(:, 1) = atan2(Q_(:,2), Q_(:,1)) - Relative_mat*Theta;
 Beta(:, 1) = -pi +  Relative_mat*Theta;
+if (rand_flag == true && N==2) % customize theta when there are 2 agents.
+    % Change the position of agent 2 to make alpha_1 = -alpha_2. The W_italic set.
+    % r = sqrt(Q(:,1).^2 + Q(:,1).^2); % C
+    % temp_dtheta = (Theta(2)-Theta(1));
+    % temp_vec = [cos(temp_dtheta)-1; sin(temp_dtheta)-0];
+    % temp_pos = Rot(Theta(1))*temp_vec+[X(1,1);Y(1,1)];
+    % X(2,1) = temp_pos(1);
+    % Y(2,1) = temp_pos(2);
+
+    % Change the k_r
+    k_r = pi/4 * rand; % 0~pi/4
+    % k_r = 5*pi/4 * rand; 
+    % k_r = pi * rand + pi/4; 
+end
 
 rgb_list = rand(N,3);
 figure(1)
+clf(figure(1))
 % axis([0, map_size(1), 0, map_size(2)]);
 axis equal
 hold on
@@ -125,11 +133,10 @@ for k = 2: t_max/dt %%% debug
     
     x_measured = round(X(:,k), xy_res) + xy_error_toggle*x_measured.*(randn(N,1).*xy_sig+xy_miu);
     y_measured = round(Y(:,k), xy_res) + xy_error_toggle*y_measured.*(randn(N,1).*xy_sig+xy_miu);
-    r_measured(1:N-1) = sqrt((x_measured(2:N)-x_measured(1:N-1)).^2 + (y_measured(2:N)-y_measured(1:N-1)).^2);
-    r_measured(N) = sqrt((x_measured(1)-x_measured(N)).^2 + (y_measured(1)-y_measured(N)).^2);
 
     Q(:,1) = Relative_mat*x_measured; % [x1-x2, y1-y2; ....]
     Q(:,2) = Relative_mat*y_measured;
+    r_measured = sqrt(Q(:,1).^2+Q(:,2).^2);
     theta_measured = round(Theta, theta_res);
     for i=1:N
         if (i == N)
@@ -138,13 +145,37 @@ for k = 2: t_max/dt %%% debug
             Q_(i,:) = transpose(Rot(theta_measured(i+1)))*transpose(Q(i,:));
         end
     end
-    Alpha(:, k) = atan2(Q_(:,2),Q_(:,1))-pi  - Relative_mat*theta_measured;
-    Beta(:, k) = -pi +  Relative_mat*theta_measured;
+    Alpha(:, k) = atan2(Q_(:,2),Q_(:,1)) +pi-Relative_mat*theta_measured;
+    Beta(:, k) = -pi +Relative_mat*theta_measured;
     
+    % %modified control law 1
+    % alpha_0 = (pi - 2*pi/N)/2;
+    % d_Alpha = (Alpha(:,k)-Alpha(:,k-1))/dt;
+    % V = k_r*r_measured - 0.5*(1./(10*abs(d_Alpha)+1)).*(r_measured-target_r);
+
+    % %modified control law 2
+    % alpha_0 = pi/N;
+    % d_Alpha = (Alpha(:,k)-Alpha(:,k-1))/dt;
+    % % V = target_r*k_alpha*alpha_0/(2*sin(alpha_0))*ones(N,1);
+    % V = 4*ones(N,1);
+
+    %modified control law 3
+    % alpha_0 = pi/N;
+    % temp_sign = sign(convertn1p1pi(Alpha(:,k))); % Guess if the agent is moving clock-wise or counter clock-wise
+    % d_Alpha = (convert02pi(Alpha(:,k))-convert02pi(Alpha(:,k-1)))/dt;
+    % V_s = target_r*k_alpha*alpha_0/(2*sin(alpha_0))*ones(N,1); % Target V
+
+    % temp_func = exp(-(convertn1p1pi(Alpha(:,k)) - temp_sign*alpha_0).^2); % Like normal distribution
+    % V = (1-temp_func).*k_r.*r_measured + temp_func.*V_s;
+
+    %Original one
     V = k_r*r_measured;
     V = round(V,v_res) + v_error_toggle*V.*(randn(N,1).*v_sig+v_miu);
+
     % disp("alpha");
     % convertn1p1pi(Alpha(:,k));
+
+    % Omega = k_alpha*(convertn1p1pi(Alpha(:,k))) - sign(Omega)*0.1.*((r_measured-target_r)./target_r);
     Omega = k_alpha*(convertn1p1pi(Alpha(:,k)));
     Omega = round(Omega,omega_res)+omega_error_toggle*Omega.*(randn(N,1).*omega_sig + omega_miu); %Assuem that the error is proportional to the value of omega
     
@@ -157,22 +188,26 @@ Alpha = convertn1p1pi(Alpha);
 Beta = convert02pi(Beta);
 
 if (rand_flag)
-    if(any((R(:,end)-R(:,end-1)).^2 > 1) || any(R(:,end)>1e5))
+    if(any(diff(R(:,end))>0.5) || any((R(:,end)-R(:,end-1)).^2 > 1) || any(R(:,end)>1e5))
         file_name = "test2_"+get_clock_str(clock());
         save(file_name+".mat", 'saved_data');
     end
 end
 
 figure(1)
+
 axis equal
 hold on
 
 figure(4)
+clf(figure(4))
 plot(Omega_logged');
+title('Omega')
 
 sleep_factor = 3; % Prevent the bugs of matlab
 
 figure(2)
+clf(figure(2))
 hold on
 subplot(3,1,1)
 ylabel("r")
